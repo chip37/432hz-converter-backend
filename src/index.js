@@ -14,6 +14,7 @@ const upload = multer({
 
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static("uploads"));
 
 app.get("/", (req, res) => {
   res.send("432Hz Converter Backend Running");
@@ -39,7 +40,7 @@ app.post("/convert", upload.single("audio"), (req, res) => {
       res.json({
         success: true,
         message: "Audio converted to 432Hz",
-        output: outputPath,
+        downloadUrl: `http://localhost:8080/${outputPath}`,
       });
     })
 
