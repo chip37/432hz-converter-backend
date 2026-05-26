@@ -35,25 +35,47 @@ app.post("/convert", upload.single("audio"), (req, res) => {
     });
   }
 
+  const conversionId = req.body.conversionId;
+
+  if (!conversionId) {
+    return res.status(400).json({
+      success: false,
+      message: "conversionId is required",
+    });
+  }
+
   const inputPath = req.file.path;
-  admin.initializeApp();
-
-const db = admin.firestore();
-
   const outputPath = `uploads/converted-${Date.now()}.mp3`;
 
   ffmpeg(inputPath)
     .audioFilters("asetrate=44100*432/440,aresample=44100")
     .save(outputPath)
+    .on("end", async () => {
+      try {
+        const downloadUrl = `https://hz-converter-backend-220631463057.us-east1.run.app/${outputPath}`;
 
-    .on("end", () => {
-      res.json({
-        success: true,
-        message: "Audio converted to 432Hz",
-        downloadUrl: `http://localhost:8080/${outputPath}`,
-      });
+        await db.collection("conversions").doc(conversionId).update({
+          status: "completed",
+          convertedFileUrl: downloadUrl,
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        res.json({
+          success: true,
+          message: "Audio converted and Firestore updated",
+          conversionId,
+          downloadUrl,
+        });
+      } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+          success: false,
+          message: "Conversion completed, but Firestore update failed",
+          error: error.message,
+        });
+      }
     })
-
     .on("error", (err) => {
       console.error(err);
 
@@ -64,6 +86,7 @@ const db = admin.firestore();
       });
     });
 });
+
 app.post("/complete-conversion", async (req, res) => {
   try {
     const { conversionId, convertedFileUrl } = req.body;
@@ -77,7 +100,7 @@ app.post("/complete-conversion", async (req, res) => {
 
     await db.collection("conversions").doc(conversionId).update({
       status: "completed",
-      convertedFileUrl: convertedFileUrl,
+      convertedFileUrl,
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -95,6 +118,7 @@ app.post("/complete-conversion", async (req, res) => {
     });
   }
 });
+
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
